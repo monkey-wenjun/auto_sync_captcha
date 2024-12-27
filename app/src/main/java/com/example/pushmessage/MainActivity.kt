@@ -17,12 +17,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.DismissDirection
+import androidx.compose.material.DismissValue
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.SwipeToDismiss
+import androidx.compose.material.rememberDismissState
+import androidx.compose.material.Card as MaterialCard
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,28 +35,31 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import java.text.SimpleDateFormat
+import java.util.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import com.example.pushmessage.SmsMessage
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import androidx.lifecycle.lifecycleScope
-import com.example.pushmessage.data.SmsMessage
 import com.example.pushmessage.ui.theme.PushMessageTheme
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import okhttp3.MediaType.Companion.toMediaType
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.text.SimpleDateFormat
-import java.util.*
-import java.util.HashSet
-import java.security.SecureRandom
-import java.util.Base64
+import okhttp3.MediaType.Companion.toMediaType
+import java.security.MessageDigest
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
-import javax.crypto.spec.GCMParameterSpec
-import com.google.accompanist.swiperefresh.SwipeRefresh
-import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
-import java.security.MessageDigest
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.Job
+import java.util.Base64
+
 
 class MainActivity : ComponentActivity() {
     private val requestPermissionLauncher = registerForActivityResult(
@@ -190,7 +195,7 @@ class MainActivity : ComponentActivity() {
                     do {
                         val msgId = it.getLong(it.getColumnIndexOrThrow(android.provider.Telephony.Sms._ID))
                         
-                        // 如果消息在排除列表中，跳过
+                        // ��果消息在排除列表中，跳过
                         if (excludedMessages.contains(msgId.toString())) {
                             continue
                         }
@@ -227,7 +232,7 @@ class MainActivity : ComponentActivity() {
             
             // 更新内存中的消息列表
             if (messages.isNotEmpty()) {
-                // 保留现有的已删除状态
+                // 保留有的已删除状态
                 val existingDeletedMessages = _smsMessages.value.filter { it.isDeleted }
                 _smsMessages.value = messages + existingDeletedMessages
                 Log.d("SMS", "Updated SMS list with ${messages.size} messages")
@@ -285,7 +290,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun permanentDelete(smsId: Long) {
-        // 从列表中完全移除消息
+        // 从表全移除消息
         _smsMessages.value = _smsMessages.value.filter { it.id != smsId }
         
         // 从删除记录中移除
@@ -332,7 +337,7 @@ class MainActivity : ComponentActivity() {
                     Log.d("SMS", "发送地址: ${settings.apiUrl}")
                     Log.d("SMS", "原始验证码: ${sms.verificationCode}")
                     
-                    // 只加密验证码
+                    // 只密验证码
                     val encryptedCode = encrypt(sms.verificationCode, settings.encryptionKey)
                     Log.d("SMS", "加密后的验证码: $encryptedCode")
                     
@@ -407,9 +412,8 @@ class MainActivity : ComponentActivity() {
         // 清理已删除消息记录
         val deletedPrefs = getSharedPreferences("deleted_messages", MODE_PRIVATE)
         val permanentlyDeletedPrefs = getSharedPreferences("permanently_deleted_messages", MODE_PRIVATE)
-        val syncedPrefs = getSharedPreferences("synced_messages", MODE_PRIVATE)
         
-        // 添加时间戳记录
+        // 添加时间记录
         val timestampPrefs = getSharedPreferences("message_timestamps", MODE_PRIVATE)
         
         // 清理过期的记录
@@ -451,8 +455,8 @@ class MainActivity : ComponentActivity() {
         _settings.value = Settings(
             apiUrl = prefs.getString("api_url", "") ?: "",
             encryptionKey = savedKey ?: run {
-                // 果没有保存的密钥，使用设备信息生成新密钥
-                val newKey = Settings.generateEncryptionKey(this)
+                // 果没有保存的密钥，使用信息生成新密钥
+                val newKey = CryptoUtils.generateEncryptionKey()
                 // 保存生成的密钥
                 prefs.edit().putString("encryption_key", newKey).apply()
                 newKey
@@ -481,7 +485,7 @@ fun SmsApp(
 ) {
     var currentTab by remember { mutableStateOf(TabItem.Inbox) }
     var isRefreshing by remember { mutableStateOf(false) }
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -518,68 +522,53 @@ fun SmsApp(
             }
         }
     ) { padding ->
-        val filteredList = when (currentTab) {
-            TabItem.Inbox -> smsList.filter { !it.isDeleted && !it.isRead }
-            TabItem.Read -> smsList.filter { !it.isDeleted && it.isRead }
-            TabItem.Trash -> smsList.filter { it.isDeleted }
-        }
-
-        Box(
+        SwipeRefresh(
+            state = rememberSwipeRefreshState(isRefreshing),
+            onRefresh = {
+                isRefreshing = true
+                onRefresh()
+                isRefreshing = false
+            },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            SwipeRefresh(
-                state = rememberSwipeRefreshState(isRefreshing),
-                onRefresh = {
-                    isRefreshing = true
-                    onRefresh()
-                    isRefreshing = false
-                },
-                modifier = Modifier.fillMaxSize(),
-                swipeEnabled = true,  // 确保启用下拉刷新
-                indicatorPadding = PaddingValues(0.dp),  // 除指示器的内边距
-                refreshTriggerDistance = 80.dp,  // 增加触发刷新的距离
-            ) {
-                if (filteredList.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clickable { onRefresh() },  // 添加点击刷新
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                            modifier = Modifier.padding(16.dp)
-                        ) {
-                            Text(
-                                text = when (currentTab) {
-                                    TabItem.Inbox -> "点击或下拉刷新获取最新验证码"
-                                    TabItem.Read -> "没有已读的验证码短信"
-                                    TabItem.Trash -> "回收站为空"
-                                },
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(
-                            items = filteredList,
-                            key = { it.id }
-                        ) { sms ->
-                            SwipeableSmsCard(
-                                sms = sms,
-                                onDelete = { onDelete(sms.id) },
-                                onMarkAsRead = { onMarkAsRead(sms.id) },
-                                enableMarkAsRead = currentTab == TabItem.Inbox
-                            )
-                        }
+            val filteredList = when (currentTab) {
+                TabItem.Inbox -> smsList.filter { !it.isDeleted && !it.isRead }
+                TabItem.Read -> smsList.filter { !it.isDeleted && it.isRead }
+                TabItem.Trash -> smsList.filter { it.isDeleted }
+            }
+
+            if (filteredList.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = when (currentTab) {
+                            TabItem.Inbox -> "下拉刷新获取最新验证码"
+                            TabItem.Read -> "没有已读的验证码短信"
+                            TabItem.Trash -> "回收站为空"
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(
+                        items = filteredList,
+                        key = { it.id }
+                    ) { sms ->
+                        SwipeableSmsCard(
+                            sms = sms,
+                            onDelete = { onDelete(sms.id) },
+                            onMarkAsRead = { onMarkAsRead(sms.id) },
+                            enableMarkAsRead = currentTab == TabItem.Inbox
+                        )
                     }
                 }
             }
@@ -587,7 +576,7 @@ fun SmsApp(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun SwipeableSmsCard(
     sms: SmsMessage,
@@ -596,16 +585,16 @@ fun SwipeableSmsCard(
     enableMarkAsRead: Boolean
 ) {
     val dismissState = rememberDismissState(
-        confirmValueChange = { dismissValue ->
+        confirmStateChange = { dismissValue ->
             when (dismissValue) {
-                DismissValue.DismissedToStart -> {
-                    onDelete()
-                    false
-                }
                 DismissValue.DismissedToEnd -> {
-                    if (enableMarkAsRead) {
+                    if (enableMarkAsRead && !sms.isRead) {
                         onMarkAsRead()
                     }
+                    false
+                }
+                DismissValue.DismissedToStart -> {
+                    onDelete()
                     false
                 }
                 DismissValue.Default -> false
@@ -617,61 +606,82 @@ fun SwipeableSmsCard(
         state = dismissState,
         background = {
             val direction = dismissState.dismissDirection
-            val color = when (direction) {
-                DismissDirection.StartToEnd -> if (enableMarkAsRead) Color(0xFF4CAF50) else Color.Transparent
-                DismissDirection.EndToStart -> Color(0xFFE53935)
-                null -> Color.Transparent
-            }
+            val color by animateColorAsState(
+                when (direction) {
+                    DismissDirection.StartToEnd -> MaterialTheme.colorScheme.primary
+                    DismissDirection.EndToStart -> MaterialTheme.colorScheme.error
+                    null -> Color.Transparent
+                }
+            )
             val alignment = when (direction) {
                 DismissDirection.StartToEnd -> Alignment.CenterStart
                 DismissDirection.EndToStart -> Alignment.CenterEnd
                 null -> Alignment.Center
             }
             val icon = when (direction) {
-                DismissDirection.StartToEnd -> if (enableMarkAsRead) Icons.Default.CheckCircle else null
+                DismissDirection.StartToEnd -> Icons.Default.CheckCircle
                 DismissDirection.EndToStart -> Icons.Default.Delete
                 null -> null
             }
-            val text = when (direction) {
-                DismissDirection.StartToEnd -> if (enableMarkAsRead) "标记已读" else ""
-                DismissDirection.EndToStart -> "删除"
-                null -> ""
-            }
-
             Box(
-                modifier = Modifier
+                Modifier
                     .fillMaxSize()
                     .background(color)
                     .padding(horizontal = 20.dp),
                 contentAlignment = alignment
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (icon != null) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = text,
-                            tint = Color.White
-                        )
-                        Text(
-                            text = text,
-                            color = Color.White,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
+                icon?.let {
+                    Icon(
+                        imageVector = it,
+                        contentDescription = null,
+                        tint = Color.White
+                    )
                 }
             }
         },
         dismissContent = {
-            SmsCard(sms = sms)
+            MaterialCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                elevation = 4.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = sms.address,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "验证码: ${sms.verificationCode}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                            .format(Date(sms.date)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         },
-        directions = if (enableMarkAsRead) {
-            setOf(DismissDirection.StartToEnd, DismissDirection.EndToStart)
-        } else {
-            setOf(DismissDirection.EndToStart)
-        }
+        directions = setOf(
+            DismissDirection.StartToEnd,
+            DismissDirection.EndToStart
+        )
     )
 }
 

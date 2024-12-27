@@ -159,4 +159,37 @@ class SmsReceiver : BroadcastReceiver() {
             return message
         }
     }
+
+    private fun matchVerificationCode(body: String, settings: Settings): String? {
+        // 首先检查自定义过滤规则
+        for (filter in settings.customFilters) {
+            if (!filter.isEnabled) continue
+            
+            val code = when (filter.type) {
+                FilterType.KEYWORD -> {
+                    if (body.contains(filter.pattern)) {
+                        // 如果包含关键字，使用默认的验证码提取规则
+                        Regex("""(?<!\d)(\d{4,6})(?!\d)""").find(body)?.groupValues?.get(1)
+                    } else null
+                }
+                FilterType.REGEX -> {
+                    try {
+                        Regex(filter.pattern).find(body)?.groupValues?.get(1)
+                    } catch (e: Exception) {
+                        Log.e("SmsReceiver", "正则表达式错误: ${filter.pattern}", e)
+                        null
+                    }
+                }
+            }
+            
+            if (code != null) return code
+        }
+        
+        // 如果没有自定义规则或都未匹配，使用默认规则
+        if (body.contains("验证码")) {
+            return Regex("""(?<!\d)(\d{4,6})(?!\d)""").find(body)?.groupValues?.get(1)
+        }
+        
+        return null
+    }
 } 

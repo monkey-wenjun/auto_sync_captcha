@@ -4,10 +4,12 @@ import android.content.Context
 import android.provider.Settings.Secure
 import java.security.MessageDigest
 import java.util.Base64
+import java.util.UUID
 
 data class Settings(
     val apiUrl: String = "",
-    val encryptionKey: String = ""  // 不再在这里生成密钥
+    val encryptionKey: String = "",
+    val customFilters: List<SmsFilter> = listOf(),
 ) {
     companion object {
         fun generateEncryptionKey(context: Context): String {
@@ -25,4 +27,16 @@ data class Settings(
             return Base64.getEncoder().encodeToString(hash)
         }
     }
+}
+
+data class SmsFilter(
+    val id: String = UUID.randomUUID().toString(),
+    val type: FilterType = FilterType.KEYWORD,
+    val pattern: String = "",
+    val isEnabled: Boolean = true
+)
+
+enum class FilterType {
+    KEYWORD,    // 关键字匹配
+    REGEX       // 正则表达式匹配
 } 
