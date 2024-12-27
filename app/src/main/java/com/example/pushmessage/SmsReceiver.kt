@@ -40,7 +40,11 @@ class SmsReceiver : BroadcastReceiver() {
                     
                     // 如果包含验证码，立即处理
                     if (body.contains("验证码")) {
-                        val verificationCode = Regex("""(?<!\d)(\d{4,6})(?!\d)""").find(body)?.groupValues?.get(1)
+                        val matchResult = Regex("""(?<!\d)(\d{4,6})(?!\d)""").find(body)
+                        Log.d("SmsReceiver", "正则匹配结果: $matchResult")
+                        val verificationCode = matchResult?.groupValues?.get(1)
+                        Log.d("SmsReceiver", "提取的验证码: $verificationCode")
+                        
                         if (verificationCode != null) {
                             // 创建 SmsMessage 对象
                             val sms = SmsMessage(
@@ -90,18 +94,19 @@ class SmsReceiver : BroadcastReceiver() {
 
         Thread {
             try {
-                val encryptedMessage = encrypt(sms.body, encryptionKey)
+                // 只加密验证码
+                val encryptedCode = encrypt(sms.verificationCode, encryptionKey)
                 val client = OkHttpClient()
                 
+                // 只发送加密后的验证码
                 val json = """
                     {
-                        "message": "$encryptedMessage",
-                        "code": "${sms.verificationCode}",
-                        "sender": "${sms.address}",
-                        "timestamp": ${sms.date},
-                        "messageHash": "$messageHash"
+                        "message": "$encryptedCode"
                     }
                 """.trimIndent()
+
+                Log.d("SmsReceiver", "Sending verification code: ${sms.verificationCode}")
+                Log.d("SmsReceiver", "Sending JSON: $json")
 
                 val request = Request.Builder()
                     .url(apiUrl)
@@ -127,7 +132,8 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     private fun generateMessageHash(sms: SmsMessage): String {
-        val key = "${sms.address}_${sms.body}_${sms.verificationCode}"
+        // 只使用验证码和发送者来生成哈希
+        val key = "${sms.address}_${sms.verificationCode}"
         val digest = MessageDigest.getInstance("SHA-256")
         val hash = digest.digest(key.toByteArray())
         return Base64.getEncoder().encodeToString(hash)
