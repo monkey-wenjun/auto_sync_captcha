@@ -28,13 +28,8 @@
 ![alt text](https://github.com/monkey-wenjun/auto_sync_captcha/blob/master/img/app2.png)
 
 
-
 ![alt text](https://github.com/monkey-wenjun/auto_sync_captcha/blob/master/img/app3.png)
 
 
 ![alt text](https://github.com/monkey-wenjun/auto_sync_captcha/blob/master/img/chrome-extension.png)
-
-
-![alt text](https://github.com/monkey-wenjun/auto_sync_captcha/blob/master/img/chrome-extension-2.png)
-
 
