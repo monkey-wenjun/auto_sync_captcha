@@ -33,3 +33,8 @@
 
 ![alt text](https://github.com/monkey-wenjun/auto_sync_captcha/blob/master/img/chrome-exte.png)
 
+
+
+## 浏览器扩展
+
+下载地址 https://github.com/monkey-wenjun/chrome-extentsion-sync-code
