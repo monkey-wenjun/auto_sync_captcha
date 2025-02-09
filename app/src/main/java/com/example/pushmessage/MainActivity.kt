@@ -59,8 +59,11 @@ import java.security.MessageDigest
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
 import java.util.Base64
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 
-
+@OptIn(ExperimentalMaterialApi::class)
 class MainActivity : ComponentActivity() {
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -195,7 +198,7 @@ class MainActivity : ComponentActivity() {
                     do {
                         val msgId = it.getLong(it.getColumnIndexOrThrow(android.provider.Telephony.Sms._ID))
                         
-                        // ��果消息在排除列表中，跳过
+                        // 果消息在排除列表中，跳过
                         if (excludedMessages.contains(msgId.toString())) {
                             continue
                         }
@@ -467,14 +470,14 @@ class MainActivity : ComponentActivity() {
     private fun startPeriodicRefresh() {
         refreshJob = lifecycleScope.launch {
             while (true) {
-                delay(30000) // 每30秒刷新一次
+                delay(1000) // 每1秒刷新一次
                 readSms()
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun SmsApp(
     smsList: List<SmsMessage>,
@@ -485,6 +488,16 @@ fun SmsApp(
 ) {
     var currentTab by remember { mutableStateOf(TabItem.Inbox) }
     var isRefreshing by remember { mutableStateOf(false) }
+    
+    // 使用新的 pullRefresh API
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh = {
+            isRefreshing = true
+            onRefresh()
+            isRefreshing = false
+        }
+    )
 
     Scaffold(
         topBar = {
@@ -522,17 +535,13 @@ fun SmsApp(
             }
         }
     ) { padding ->
-        SwipeRefresh(
-            state = rememberSwipeRefreshState(isRefreshing),
-            onRefresh = {
-                isRefreshing = true
-                onRefresh()
-                isRefreshing = false
-            },
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .pullRefresh(pullRefreshState)
         ) {
+            // 原有的列表内容
             val filteredList = when (currentTab) {
                 TabItem.Inbox -> smsList.filter { !it.isDeleted && !it.isRead }
                 TabItem.Read -> smsList.filter { !it.isDeleted && it.isRead }
@@ -572,6 +581,13 @@ fun SmsApp(
                     }
                 }
             }
+
+            // 添加下拉刷新指示器
+            PullRefreshIndicator(
+                refreshing = isRefreshing,
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
         }
     }
 }

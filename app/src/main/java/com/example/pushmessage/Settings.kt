@@ -9,7 +9,7 @@ import java.util.UUID
 data class Settings(
     val apiUrl: String = "",
     val encryptionKey: String = "",
-    val customFilters: List<SmsFilter> = listOf(),
+    val customFilters: List<SmsFilter> = listOf()
 ) {
     companion object {
         fun generateEncryptionKey(context: Context): String {
