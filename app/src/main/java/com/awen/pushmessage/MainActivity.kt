@@ -55,6 +55,8 @@ import javax.crypto.spec.SecretKeySpec
 import java.util.Base64
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import android.content.Intent
+import android.os.Build
 
 @OptIn(ExperimentalMaterialApi::class)
 class MainActivity : ComponentActivity() {
@@ -72,6 +74,9 @@ class MainActivity : ComponentActivity() {
     private var _settings = mutableStateOf(Settings())
     private var refreshJob: Job? = null
     private var eventCollectorJob: Job? = null
+    
+    // 屏幕状态广播接收器
+    private var screenStateReceiver: ScreenStateReceiver? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -82,6 +87,12 @@ class MainActivity : ComponentActivity() {
         
         // 清理过期的同步记录
         cleanOldSyncRecords()
+
+        // 启动保活服务
+        startKeepAliveService()
+        
+        // 启动JobService
+        KeepAliveJobService.scheduleJob(this)
 
         // 监听SMS更新事件
         eventCollectorJob = lifecycleScope.launch {
@@ -121,10 +132,31 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        
+        // 注册屏幕状态广播接收器
+        if (screenStateReceiver == null) {
+            screenStateReceiver = ScreenStateReceiver.register(this)
+        }
+    }
+
     override fun onDestroy() {
+        super.onDestroy()
+        
+        // 取消注册屏幕状态广播接收器
+        screenStateReceiver?.let {
+            try {
+                unregisterReceiver(it)
+                screenStateReceiver = null
+            } catch (e: Exception) {
+                Log.e("MainActivity", "取消注册屏幕状态广播接收器失败", e)
+            }
+        }
+        
+        // 取消任务
         refreshJob?.cancel()
         eventCollectorJob?.cancel()
-        super.onDestroy()
     }
 
     private fun checkSmsPermissions() {
@@ -463,6 +495,18 @@ class MainActivity : ComponentActivity() {
                     cleanOldSyncRecords()
                 }
             }
+        }
+    }
+
+    /**
+     * 启动保活服务
+     */
+    private fun startKeepAliveService() {
+        val serviceIntent = Intent(this, KeepAliveService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
         }
     }
 }

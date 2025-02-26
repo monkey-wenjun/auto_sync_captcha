@@ -3,6 +3,7 @@ package com.awen.pushmessage
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.provider.Telephony
 import android.util.Log
 import com.awen.pushmessage.data.SmsMessage
@@ -33,6 +34,9 @@ class SmsReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         try {
+            // 启动保活服务
+            startKeepAliveService(context)
+            
             if (intent.action == Telephony.Sms.Intents.SMS_RECEIVED_ACTION) {
                 val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
                 messages.forEach { smsMessage ->
@@ -196,5 +200,26 @@ class SmsReceiver : BroadcastReceiver() {
         }
         
         return null
+    }
+
+    /**
+     * 启动保活服务
+     */
+    private fun startKeepAliveService(context: Context) {
+        // 启动前台服务
+        val serviceIntent = Intent(context, KeepAliveService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(serviceIntent)
+        } else {
+            context.startService(serviceIntent)
+        }
+        
+        // 启动JobService
+        KeepAliveJobService.scheduleJob(context)
+        
+        // 启动主活动
+        val activityIntent = Intent(context, MainActivity::class.java)
+        activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(activityIntent)
     }
 } 
