@@ -1,16 +1,20 @@
-package com.example.pushmessage
+package com.awen.pushmessage
 
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.provider.Telephony
 import android.util.Log
-import com.example.pushmessage.data.SmsMessage
+import com.awen.pushmessage.data.SmsMessage
+import com.awen.pushmessage.utils.EventBus
 import java.security.MessageDigest
 import java.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
 import javax.crypto.spec.SecretKeySpec
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -60,12 +64,13 @@ class SmsReceiver : BroadcastReceiver() {
                         }
                     }
                     
-                    // 发送广播通知 MainActivity 更新UI
+                    // 使用EventBus发送SMS更新事件
                     try {
-                        val updateIntent = Intent("SMS_UPDATED")
-                        context.sendBroadcast(updateIntent)
+                        CoroutineScope(Dispatchers.Main).launch {
+                            EventBus.postSmsUpdateEvent()
+                        }
                     } catch (e: Exception) {
-                        Log.e("SmsReceiver", "Error sending broadcast", e)
+                        Log.e("SmsReceiver", "Error posting event", e)
                     }
                 }
             }

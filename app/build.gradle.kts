@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.pushmessage"
+    namespace = "com.awen.pushmessage"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.pushmessage"
+        applicationId = "com.awen.pushmessage"
         minSdk = 33
         targetSdk = 34
         versionCode = 1

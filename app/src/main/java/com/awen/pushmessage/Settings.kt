@@ -1,4 +1,4 @@
-package com.example.pushmessage
+package com.awen.pushmessage
 
 import android.content.Context
 import android.provider.Settings.Secure

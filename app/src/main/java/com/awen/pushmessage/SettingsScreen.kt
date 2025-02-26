@@ -1,4 +1,4 @@
-package com.example.pushmessage
+package com.awen.pushmessage
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -16,7 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.example.pushmessage.settings.settingItems
+import com.awen.pushmessage.settings.settingItems
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

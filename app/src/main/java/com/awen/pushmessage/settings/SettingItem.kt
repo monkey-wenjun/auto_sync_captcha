@@ -1,4 +1,4 @@
-package com.example.pushmessage.settings
+package com.awen.pushmessage.settings
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Send

@@ -1,11 +1,9 @@
-package com.example.pushmessage
+@file:OptIn(ExperimentalMaterialApi::class)
+
+package com.awen.pushmessage
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -13,7 +11,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,6 +23,7 @@ import androidx.compose.material.Card as MaterialCard
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,22 +33,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.google.accompanist.swiperefresh.SwipeRefresh
-import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
-import com.example.pushmessage.SmsMessage
+import com.awen.pushmessage.data.SmsMessage
+import com.awen.pushmessage.utils.CryptoUtils
+import com.awen.pushmessage.utils.EventBus
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 import androidx.lifecycle.lifecycleScope
-import com.example.pushmessage.ui.theme.PushMessageTheme
+import com.awen.pushmessage.ui.theme.PushMessageTheme
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -59,9 +53,8 @@ import java.security.MessageDigest
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
 import java.util.Base64
-import androidx.compose.material.pullrefresh.PullRefreshIndicator
-import androidx.compose.material.pullrefresh.pullRefresh
-import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 
 @OptIn(ExperimentalMaterialApi::class)
 class MainActivity : ComponentActivity() {
@@ -74,19 +67,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private val smsUpdateReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == "SMS_UPDATED") {
-                readSms()
-            }
-        }
-    }
-
     private var _smsMessages = mutableStateOf<List<SmsMessage>>(emptyList())
-    private var _currentTab = mutableStateOf(TabItem.Inbox)
     private var _showSettings = mutableStateOf(false)
     private var _settings = mutableStateOf(Settings())
     private var refreshJob: Job? = null
+    private var eventCollectorJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -94,12 +79,15 @@ class MainActivity : ComponentActivity() {
         
         loadSettings()
         checkSmsPermissions()
+        
+        // 清理过期的同步记录
+        cleanOldSyncRecords()
 
-        // 注册广播接收器
-        try {
-            registerReceiver(smsUpdateReceiver, IntentFilter("SMS_UPDATED"))
-        } catch (e: Exception) {
-            Log.e("MainActivity", "Error registering receiver", e)
+        // 监听SMS更新事件
+        eventCollectorJob = lifecycleScope.launch {
+            EventBus.smsUpdateEvent.collect {
+                readSms()
+            }
         }
 
         // 启动定期刷新
@@ -120,12 +108,13 @@ class MainActivity : ComponentActivity() {
                         onNavigateBack = { showSettings = false }
                     )
                 } else {
-                    SmsApp(
+                    MainScreen(
                         smsList = _smsMessages.value,
-                        onMarkAsRead = { smsId -> markAsRead(smsId) },
-                        onDelete = { smsId -> moveToTrash(smsId) },
+                        onRefresh = { readSms() },
                         onSettingsClick = { showSettings = true },
-                        onRefresh = { readSms() }
+                        onDeleteSms = { sms -> moveToTrash(sms.id) },
+                        onRestoreSms = { sms -> markAsRead(sms.id) },
+                        onMarkAsRead = { sms -> markAsRead(sms.id) }
                     )
                 }
             }
@@ -134,11 +123,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         refreshJob?.cancel()
-        try {
-            unregisterReceiver(smsUpdateReceiver)
-        } catch (e: Exception) {
-            Log.e("MainActivity", "Error unregistering receiver", e)
-        }
+        eventCollectorJob?.cancel()
         super.onDestroy()
     }
 
@@ -310,7 +295,7 @@ class MainActivity : ComponentActivity() {
         
         // 从同步记录中移除
         getSharedPreferences("synced_messages", MODE_PRIVATE).edit().apply {
-            val messageHash = _smsMessages.value.find { it.id == smsId }?.let { generateMessageHash(it) }
+            val messageHash = _smsMessages.value.find { sms -> sms.id == smsId }?.let { foundSms -> generateMessageHash(foundSms) }
             if (messageHash != null) {
                 remove(messageHash)
             }
@@ -472,33 +457,31 @@ class MainActivity : ComponentActivity() {
             while (true) {
                 delay(1000) // 每1秒刷新一次
                 readSms()
+                
+                // 每天清理一次过期记录
+                if (System.currentTimeMillis() % (24 * 60 * 60 * 1000) < 1000) {
+                    cleanOldSyncRecords()
+                }
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
-fun SmsApp(
+fun MainScreen(
     smsList: List<SmsMessage>,
-    onMarkAsRead: (Long) -> Unit,
-    onDelete: (Long) -> Unit,
+    onRefresh: () -> Unit,
     onSettingsClick: () -> Unit,
-    onRefresh: () -> Unit
+    onDeleteSms: (SmsMessage) -> Unit,
+    onRestoreSms: (SmsMessage) -> Unit,
+    onMarkAsRead: (SmsMessage) -> Unit
 ) {
     var currentTab by remember { mutableStateOf(TabItem.Inbox) }
     var isRefreshing by remember { mutableStateOf(false) }
+    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = isRefreshing)
     
-    // 使用新的 pullRefresh API
-    val pullRefreshState = rememberPullRefreshState(
-        refreshing = isRefreshing,
-        onRefresh = {
-            isRefreshing = true
-            onRefresh()
-            isRefreshing = false
-        }
-    )
-
+    @OptIn(ExperimentalMaterial3Api::class)
     Scaffold(
         topBar = {
             TopAppBar(
@@ -519,7 +502,7 @@ fun SmsApp(
         },
         bottomBar = {
             NavigationBar {
-                TabItem.values().forEach { tab ->
+                TabItem.entries.forEach { tab ->
                     NavigationBarItem(
                         icon = { 
                             Icon(
@@ -535,11 +518,16 @@ fun SmsApp(
             }
         }
     ) { padding ->
-        Box(
+        SwipeRefresh(
+            state = swipeRefreshState,
+            onRefresh = {
+                isRefreshing = true
+                onRefresh()
+                isRefreshing = false
+            },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .pullRefresh(pullRefreshState)
         ) {
             // 原有的列表内容
             val filteredList = when (currentTab) {
@@ -570,29 +558,22 @@ fun SmsApp(
                 ) {
                     items(
                         items = filteredList,
-                        key = { it.id }
+                        key = { sms: SmsMessage -> sms.id }
                     ) { sms ->
                         SwipeableSmsCard(
                             sms = sms,
-                            onDelete = { onDelete(sms.id) },
-                            onMarkAsRead = { onMarkAsRead(sms.id) },
+                            onDelete = { onDeleteSms(sms) },
+                            onMarkAsRead = { onMarkAsRead(sms) },
                             enableMarkAsRead = currentTab == TabItem.Inbox
                         )
                     }
                 }
             }
-
-            // 添加下拉刷新指示器
-            PullRefreshIndicator(
-                refreshing = isRefreshing,
-                state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
         }
     }
 }
 
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun SwipeableSmsCard(
     sms: SmsMessage,
@@ -708,40 +689,4 @@ enum class TabItem(
     Inbox("收件箱", Icons.Default.Email),
     Read("已读", Icons.Default.Done),
     Trash("回收站", Icons.Default.Delete)
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SmsCard(sms: SmsMessage) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth()
-        ) {
-            Text(
-                text = sms.address,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "验证码: ${sms.verificationCode}",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                    .format(Date(sms.date)),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
 }

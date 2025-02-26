@@ -1,4 +1,4 @@
-package com.example.pushmessage.data
+package com.awen.pushmessage.data
 
 data class SmsMessage(
     val id: Long,
