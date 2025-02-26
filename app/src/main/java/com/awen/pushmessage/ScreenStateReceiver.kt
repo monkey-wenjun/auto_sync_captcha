@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Build
 import android.util.Log
 
 /**
@@ -52,7 +53,14 @@ class ScreenStateReceiver : BroadcastReceiver() {
                 addAction(Intent.ACTION_USER_PRESENT)
                 addAction("com.awen.pushmessage.CLOSE_PIXEL_ACTIVITY")
             }
-            context.registerReceiver(receiver, filter)
+            
+            // Android 13 (API 33) 及以上版本需要指定 RECEIVER_NOT_EXPORTED
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                context.registerReceiver(receiver, filter)
+            }
+            
             return receiver
         }
     }

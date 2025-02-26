@@ -91,8 +91,12 @@ class MainActivity : ComponentActivity() {
         // 启动保活服务
         startKeepAliveService()
         
-        // 启动JobService
-        KeepAliveJobService.scheduleJob(this)
+        // 只在应用首次启动时调度 JobService
+        val prefs = getSharedPreferences("app_state", MODE_PRIVATE)
+        if (!prefs.getBoolean("job_scheduled", false)) {
+            KeepAliveJobService.scheduleJob(this)
+            prefs.edit().putBoolean("job_scheduled", true).apply()
+        }
 
         // 监听SMS更新事件
         eventCollectorJob = lifecycleScope.launch {
