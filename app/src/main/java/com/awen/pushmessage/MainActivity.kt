@@ -53,10 +53,10 @@ import java.security.MessageDigest
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
 import java.util.Base64
-import com.google.accompanist.swiperefresh.SwipeRefresh
-import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import android.content.Intent
 import android.os.Build
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 
 @OptIn(ExperimentalMaterialApi::class)
 class MainActivity : ComponentActivity() {
@@ -72,12 +72,13 @@ class MainActivity : ComponentActivity() {
     private var _smsMessages = mutableStateOf<List<SmsMessage>>(emptyList())
     private var _showSettings = mutableStateOf(false)
     private var _settings = mutableStateOf(Settings())
-    private var refreshJob: Job? = null
     private var eventCollectorJob: Job? = null
     
     // 屏幕状态广播接收器
     private var screenStateReceiver: ScreenStateReceiver? = null
 
+    private var lastReadTime = 0L
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -100,13 +101,22 @@ class MainActivity : ComponentActivity() {
 
         // 监听SMS更新事件
         eventCollectorJob = lifecycleScope.launch {
+            // 启动清理任务
+            launch {
+                while (true) {
+                    val now = System.currentTimeMillis()
+                    val nextDay = now - (now % (24 * 60 * 60 * 1000)) + (24 * 60 * 60 * 1000)
+                    val delayTime = nextDay - now
+                    delay(delayTime)
+                    cleanOldSyncRecords()
+                }
+            }
+            
+            // 监听短信更新
             EventBus.smsUpdateEvent.collect {
                 readSms()
             }
         }
-
-        // 启动定期刷新
-        startPeriodicRefresh()
 
         setContent {
             PushMessageTheme {
@@ -128,7 +138,7 @@ class MainActivity : ComponentActivity() {
                         onRefresh = { readSms() },
                         onSettingsClick = { showSettings = true },
                         onDeleteSms = { sms -> moveToTrash(sms.id) },
-                        onRestoreSms = { sms -> markAsRead(sms.id) },
+                        onRestoreSms = { /* 未使用，但保留参数以避免编译错误 */ },
                         onMarkAsRead = { sms -> markAsRead(sms.id) }
                     )
                 }
@@ -159,7 +169,6 @@ class MainActivity : ComponentActivity() {
         }
         
         // 取消任务
-        refreshJob?.cancel()
         eventCollectorJob?.cancel()
     }
 
@@ -182,7 +191,14 @@ class MainActivity : ComponentActivity() {
 
     private fun readSms() {
         try {
-            val thirtyMinutesAgo = System.currentTimeMillis() - (30 * 60 * 1000)
+            val currentTime = System.currentTimeMillis()
+            // 如果距离上次读取时间不到10秒，则跳过
+            if (currentTime - lastReadTime < 10000) {
+                return
+            }
+            lastReadTime = currentTime
+            
+            val thirtyMinutesAgo = currentTime - (30 * 60 * 1000)
             
             // 读取已删除和永久删除的消息ID
             val deletedPrefs = getSharedPreferences("deleted_messages", MODE_PRIVATE)
@@ -488,20 +504,6 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    private fun startPeriodicRefresh() {
-        refreshJob = lifecycleScope.launch {
-            while (true) {
-                delay(1000) // 每1秒刷新一次
-                readSms()
-                
-                // 每天清理一次过期记录
-                if (System.currentTimeMillis() % (24 * 60 * 60 * 1000) < 1000) {
-                    cleanOldSyncRecords()
-                }
-            }
-        }
-    }
-
     /**
      * 启动保活服务
      */
@@ -527,7 +529,7 @@ fun MainScreen(
 ) {
     var currentTab by remember { mutableStateOf(TabItem.Inbox) }
     var isRefreshing by remember { mutableStateOf(false) }
-    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = isRefreshing)
+    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing)
     
     @OptIn(ExperimentalMaterial3Api::class)
     Scaffold(
