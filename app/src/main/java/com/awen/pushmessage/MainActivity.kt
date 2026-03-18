@@ -54,7 +54,10 @@ import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
 import java.util.Base64
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
+import android.content.Context
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 
@@ -72,6 +75,7 @@ class MainActivity : ComponentActivity() {
     private var _smsMessages = mutableStateOf<List<SmsMessage>>(emptyList())
     private var _showSettings = mutableStateOf(false)
     private var _settings = mutableStateOf(Settings())
+    private var _showBatteryOptimizationDialog = mutableStateOf(false)
     private var eventCollectorJob: Job? = null
     
     // 屏幕状态广播接收器
@@ -83,8 +87,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         
+        // 设置浅色背景
+        window.setBackgroundDrawableResource(android.R.color.white)
+        window.decorView.setBackgroundColor(android.graphics.Color.parseColor("#FFF5F5F5"))
+        
         loadSettings()
         checkSmsPermissions()
+        
+        // 检查电池优化白名单
+        checkBatteryOptimization()
         
         // 清理过期的同步记录
         cleanOldSyncRecords()
@@ -122,7 +133,14 @@ class MainActivity : ComponentActivity() {
             PushMessageTheme {
                 var showSettings by remember { _showSettings }
                 var settings by remember { _settings }
+                var showBatteryDialog by remember { _showBatteryOptimizationDialog }
                 
+                // 设置背景色
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                ) {
                 if (showSettings) {
                     SettingsScreen(
                         settings = settings,
@@ -141,6 +159,35 @@ class MainActivity : ComponentActivity() {
                         onRestoreSms = { /* 未使用，但保留参数以避免编译错误 */ },
                         onMarkAsRead = { sms -> markAsRead(sms.id) }
                     )
+                }
+                
+                // 电池优化白名单提示对话框
+                if (showBatteryDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showBatteryDialog = false },
+                        title = { Text("需要关闭电池优化") },
+                        text = { 
+                            Text("为了保证验证码能实时同步到服务器，需要允许应用在后台运行。\n\n请将此应用添加到电池优化白名单。")
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    showBatteryDialog = false
+                                    requestBatteryOptimizationWhitelist()
+                                }
+                            ) {
+                                Text("去设置")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = { showBatteryDialog = false }
+                            ) {
+                                Text("稍后")
+                            }
+                        }
+                    )
+                }
                 }
             }
         }
@@ -185,6 +232,50 @@ class MainActivity : ComponentActivity() {
                         Manifest.permission.RECEIVE_SMS
                     )
                 )
+            }
+        }
+    }
+
+    /**
+     * 检查电池优化白名单
+     * 如果不在白名单中，提示用户设置
+     */
+    private fun checkBatteryOptimization() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            val packageName = packageName
+            
+            // 检查是否已在白名单中
+            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                Log.d(TAG, "应用不在电池优化白名单中，提示用户设置")
+                
+                // 显示对话框引导用户设置
+                _showBatteryOptimizationDialog.value = true
+            } else {
+                Log.d(TAG, "应用已在电池优化白名单中")
+            }
+        }
+    }
+
+    /**
+     * 请求添加到电池优化白名单
+     */
+    private fun requestBatteryOptimizationWhitelist() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "打开电池优化设置失败", e)
+                // 如果直接请求失败，打开普通设置页面
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_BATTERY_SAVER_SETTINGS)
+                    startActivity(intent)
+                } catch (e2: Exception) {
+                    Log.e(TAG, "打开电池设置也失败", e2)
+                }
             }
         }
     }
@@ -740,3 +831,5 @@ enum class TabItem(
     Read("已读", Icons.Default.Done),
     Trash("回收站", Icons.Default.Delete)
 }
+
+private const val TAG = "MainActivity"

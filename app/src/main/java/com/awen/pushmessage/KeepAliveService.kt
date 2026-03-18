@@ -13,55 +13,48 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 
 /**
- * 保活前台服务
+ * 保活前台服务 - 后台静默运行
  */
 class KeepAliveService : Service() {
     
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "KeepAliveService onCreate")
+        Log.d(TAG, "服务创建")
         startForeground()
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "KeepAliveService onStartCommand")
-        
-        // 如果服务被系统杀死，则自动重启服务
+        Log.d(TAG, "服务启动")
+        // 被杀死后自动重启
         return START_STICKY
     }
     
-    override fun onBind(intent: Intent?): IBinder? {
-        return null
-    }
+    override fun onBind(intent: Intent?): IBinder? = null
     
     override fun onDestroy() {
-        Log.d(TAG, "KeepAliveService onDestroy")
+        Log.d(TAG, "服务销毁")
         super.onDestroy()
-        
-        // 服务被销毁时，尝试重启服务
-        val restartServiceIntent = Intent(applicationContext, KeepAliveService::class.java)
-        restartServiceIntent.setPackage(packageName)
-        startService(restartServiceIntent)
+        // 尝试重启服务
+        try {
+            val restartIntent = Intent(applicationContext, KeepAliveService::class.java)
+            restartIntent.setPackage(packageName)
+            startService(restartIntent)
+        } catch (e: Exception) {
+            Log.e(TAG, "重启服务失败", e)
+        }
     }
     
-    /**
-     * 当应用被从最近任务列表中移除时调用
-     * 这个方法是Service类中的方法，用于处理应用被杀死的情况
-     */
     override fun onTaskRemoved(rootIntent: Intent?) {
-        Log.d(TAG, "KeepAliveService onTaskRemoved - 应用被从最近任务列表中移除")
+        Log.d(TAG, "应用从最近任务移除")
         super.onTaskRemoved(rootIntent)
-        
-        // 尝试重启服务
-        val restartServiceIntent = Intent(applicationContext, KeepAliveService::class.java)
-        restartServiceIntent.setPackage(packageName)
-        startService(restartServiceIntent)
-        
-        // 尝试重启应用
-        val restartAppIntent = Intent(applicationContext, MainActivity::class.java)
-        restartAppIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        startActivity(restartAppIntent)
-        
+        // 服务保持运行，不重启Activity
+        try {
+            val serviceIntent = Intent(applicationContext, KeepAliveService::class.java)
+            serviceIntent.setPackage(packageName)
+            startService(serviceIntent)
+        } catch (e: Exception) {
+            Log.e(TAG, "任务移除后重启服务失败", e)
+        }
         // 重新调度JobService
         KeepAliveJobService.scheduleJob(applicationContext)
     }
@@ -70,22 +63,23 @@ class KeepAliveService : Service() {
         val channelId = "keep_alive_service"
         val channelName = "验证码监控服务"
         
-        // 创建通知渠道（Android 8.0及以上需要）
+        // 创建通知渠道
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
                 channelName,
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_MIN  // 最低重要性，静默通知
             ).apply {
-                description = "保持验证码监控服务运行"
+                description = "保持验证码监控服务后台运行"
                 setShowBadge(false)
+                enableLights(false)
+                enableVibration(false)
             }
-            
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
         }
         
-        // 创建点击通知时打开应用的Intent
+        // 点击通知打开主界面
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
@@ -93,16 +87,17 @@ class KeepAliveService : Service() {
             PendingIntent.FLAG_IMMUTABLE
         )
         
-        // 创建通知
+        // 创建前台服务通知
         val notification = NotificationCompat.Builder(this, channelId)
-            .setContentTitle("验证码监控")
-            .setContentText("正在监控新的验证码消息")
+            .setContentTitle("验证码监控运行中")
+            .setContentText("正在后台监控新的验证码消息")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
+            .setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()
         
-        // 启动前台服务
         startForeground(NOTIFICATION_ID, notification)
     }
     
@@ -110,4 +105,4 @@ class KeepAliveService : Service() {
         private const val TAG = "KeepAliveService"
         private const val NOTIFICATION_ID = 1001
     }
-} 
+}

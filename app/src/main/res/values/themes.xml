@@ -1,7 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.PushMessage" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- 应用主主题 - 蓝白简约风 -->
+    <style name="Theme.PushMessage" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- 主色调 -->
+        <item name="android:colorPrimary">@color/primary</item>
+        <item name="android:colorPrimaryDark">@color/primary_variant</item>
+        <item name="android:colorAccent">@color/secondary</item>
+        
+        <!-- 背景色 -->
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:colorBackground">@color/background</item>
+        
+        <!-- 文字颜色 -->
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="android:textColorHint">@color/text_hint</item>
+        
+        <!-- 控件颜色 -->
+        <item name="android:colorControlNormal">@color/primary</item>
+        <item name="android:colorControlActivated">@color/primary_variant</item>
+        <item name="android:colorControlHighlight">@color/secondary_light</item>
+        
+        <!-- 状态栏 -->
+        <item name="android:statusBarColor">@color/primary_variant</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
     
     <!-- 1像素Activity的主题 -->
     <style name="PixelActivityTheme" parent="android:Theme.Translucent.NoTitleBar">

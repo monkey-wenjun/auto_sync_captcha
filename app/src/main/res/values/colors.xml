@@ -1,10 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
+    <!-- 蓝白简约风配色 -->
+    
+    <!-- 主色调：清爽蓝 -->
+    <color name="primary">#FF1E5C9B</color>
+    <color name="primary_variant">#FF154A7D</color>
+    <color name="primary_light">#FF4A8BC7</color>
+    
+    <!-- 辅助色：浅蓝/天蓝 -->
+    <color name="secondary">#FF5B9BD5</color>
+    <color name="secondary_light">#FFB4D3F0</color>
+    
+    <!-- 背景色 -->
+    <color name="background">#FFF5F5F5</color>
+    <color name="surface">#FFFFFFFF</color>
+    <color name="card_background">#FFFFFFFF</color>
+    
+    <!-- 文字颜色 -->
+    <color name="text_primary">#FF333333</color>
+    <color name="text_secondary">#FF666666</color>
+    <color name="text_hint">#FFAAAAAA</color>
+    <color name="text_on_primary">#FFFFFFFF</color>
+    
+    <!-- 验证码高亮色 -->
+    <color name="code_highlight">#FF5B9BD5</color>
+    
+    <!-- 功能色 -->
+    <color name="success">#FF4CAF50</color>
+    <color name="warning">#FFFF9800</color>
+    <color name="error">#FFE57373</color>
+    
+    <!-- 分割线、边框 -->
+    <color name="divider">#FFE0E0E0</color>
+    <color name="border">#FFD0D0D0</color>
+    
+    <!-- 基础色 -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    
+    <!-- 兼容旧颜色定义 -->
+    <color name="purple_200">#FFB4D3F0</color>
+    <color name="purple_500">#FF1E5C9B</color>
+    <color name="purple_700">#FF154A7D</color>
+    <color name="teal_200">#FF5B9BD5</color>
+    <color name="teal_700">#FF4A8BC7</color>
 </resources>
