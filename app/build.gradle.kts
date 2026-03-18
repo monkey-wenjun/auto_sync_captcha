@@ -18,13 +18,49 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // 签名配置 - 使用环境变量或本地密钥库
+    signingConfigs {
+        create("release") {
+            // 优先使用环境变量（CI/CD环境）
+            val keystorePath = System.getenv("KEYSTORE_PATH")
+            if (keystorePath != null) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            } else {
+                // 本地开发环境使用 local.properties 或默认路径
+                val localProperties = rootProject.file("local.properties")
+                if (localProperties.exists()) {
+                    val props = java.util.Properties()
+                    props.load(localProperties.inputStream())
+                    val localKeystore = props.getProperty("keystore.path")
+                    if (localKeystore != null) {
+                        storeFile = file(localKeystore)
+                        storePassword = props.getProperty("keystore.password")
+                        keyAlias = props.getProperty("key.alias")
+                        keyPassword = props.getProperty("key.password")
+                    }
+                }
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // 如果签名配置可用则启用
+            if (signingConfigs.named("release").get().storeFile?.exists() == true) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+        debug {
+            isDebuggable = true
         }
     }
     compileOptions {

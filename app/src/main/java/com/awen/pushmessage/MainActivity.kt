@@ -449,7 +449,7 @@ class MainActivity : ComponentActivity() {
     private fun saveSettings(settings: Settings) {
         getSharedPreferences("settings", MODE_PRIVATE).edit().apply {
             putString("api_url", settings.apiUrl)
-            putString("encryption_key", settings.encryptionKey)
+            // 注意：encryption_key 现在由 KeystoreManager 安全管理，不再存储在 SharedPreferences
             apply()
         }
     }
@@ -582,16 +582,11 @@ class MainActivity : ComponentActivity() {
 
     private fun loadSettings() {
         val prefs = getSharedPreferences("settings", MODE_PRIVATE)
-        val savedKey = prefs.getString("encryption_key", null)
+        // 使用 Android Keystore 安全获取密钥
+        val secureKey = com.awen.pushmessage.utils.KeystoreManager.getEncryptionKey(this)
         _settings.value = Settings(
             apiUrl = prefs.getString("api_url", "") ?: "",
-            encryptionKey = savedKey ?: run {
-                // 果没有保存的密钥，使用信息生成新密钥
-                val newKey = CryptoUtils.generateEncryptionKey()
-                // 保存生成的密钥
-                prefs.edit().putString("encryption_key", newKey).apply()
-                newKey
-            }
+            encryptionKey = secureKey
         )
     }
 

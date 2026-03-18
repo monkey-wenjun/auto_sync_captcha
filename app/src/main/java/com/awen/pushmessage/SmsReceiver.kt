@@ -85,7 +85,8 @@ class SmsReceiver : BroadcastReceiver() {
     private fun sendSmsToServer(context: Context, sms: SmsData) {
         val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         val apiUrl = prefs.getString("api_url", "") ?: ""
-        val encryptionKey = prefs.getString("encryption_key", "") ?: ""
+        // 使用 Android Keystore 安全获取密钥
+        val encryptionKey = com.awen.pushmessage.utils.KeystoreManager.getEncryptionKey(context)
         
         if (apiUrl.isBlank()) {
             Log.d(TAG, "API地址未配置，跳过同步")

@@ -1,13 +1,18 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Backup rules for Android 11 and below.
+   Excludes sensitive data like encryption keys.
    See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older that API 31
-   See https://developer.android.com/about/versions/12/backup-restore
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <!-- 排除包含加密密钥的 SharedPreferences -->
+    <exclude domain="sharedpref" path="settings.xml"/>
+    <!-- 排除同步消息记录 -->
+    <exclude domain="sharedpref" path="synced_messages.xml"/>
+    <!-- 排除删除消息记录 -->
+    <exclude domain="sharedpref" path="deleted_messages.xml"/>
+    <!-- 排除永久删除消息记录 -->
+    <exclude domain="sharedpref" path="permanently_deleted_messages.xml"/>
+    <!-- 排除数据库文件 -->
+    <exclude domain="database" path="."/>
 </full-backup-content>

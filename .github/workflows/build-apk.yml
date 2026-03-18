@@ -1,0 +1,108 @@
+name: Build APK
+
+on:
+  # 推送到 main/master 分支或标签时触发
+  push:
+    branches: ["main", "master"]
+    tags:
+      - 'v*'
+  # 允许手动触发
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: '构建类型'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - debug
+          - release
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 检出代码
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      # 设置 JDK 17
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+      
+      # 授予 gradlew 执行权限
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      
+      # 确定构建类型
+      - name: Set build type
+        id: build-type
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "type=${{ inputs.build_type }}" >> $GITHUB_OUTPUT
+          else
+            echo "type=release" >> $GITHUB_OUTPUT
+          fi
+      
+      # 配置签名密钥（仅 Release 构建）
+      - name: Setup signing key
+        if: steps.build-type.outputs.type == 'release'
+        env:
+          ENCODED_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$ENCODED_KEYSTORE" ]; then
+            echo "Decoding signing key..."
+            echo "$ENCODED_KEYSTORE" | base64 -d > release.keystore
+            echo "KEYSTORE_PATH=release.keystore" >> $GITHUB_ENV
+            echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+            echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
+          else
+            echo "No signing key found, will build unsigned APK"
+          fi
+      
+      # 编译 APK
+      - name: Build APK
+        run: ./gradlew assemble${{ steps.build-type.outputs.type == 'release' && 'Release' || 'Debug' }}
+      
+      # 上传 Release APK 作为 Artifact
+      - name: Upload Release APK
+        if: steps.build-type.outputs.type == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 30
+      
+      # 上传 Debug APK 作为 Artifact
+      - name: Upload Debug APK
+        if: steps.build-type.outputs.type == 'debug'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 30
+      
+      # 验证 APK 签名（仅 Release 构建）
+      - name: Verify APK signature
+        if: steps.build-type.outputs.type == 'release' && env.KEYSTORE_PATH != ''
+        run: |
+          APK_FILE=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          echo "Verifying APK: $APK_FILE"
+          jarsigner -verify -verbose -certs "$APK_FILE" || true
+      
+      # 创建 GitHub Release (仅在推送标签时)
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: app/build/outputs/apk/release/*.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
